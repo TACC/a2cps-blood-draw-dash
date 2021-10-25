@@ -61,7 +61,7 @@ def load_weekly_data(weekly_csv, display_terms_dict):
         df = df.apply(pd.to_numeric, errors='ignore')
 
         # convert date columns from object --> datetime datatypes as appropriate
-        datetime_cols_list = ['date_of_contact','date_and_time','ewdateterm'] #erep_local_dtime also dates, but currently an array
+        datetime_cols_list = ['date_of_contact','date_and_time','obtain_date','ewdateterm'] #erep_local_dtime also dates, but currently an array
         df[datetime_cols_list] = df[datetime_cols_list].apply(pd.to_datetime)
         for i in display_terms_dict.keys():
             if i in df.columns:
@@ -258,7 +258,7 @@ def get_table_3(df,end_report_date = datetime.now(), days_range = 30):
     t3['eligible'] = eligible
 
     # Get conset within last days range days
-    within_days_range = ((end_report_date - t3.date_and_time).dt.days) <= days_range
+    within_days_range = ((end_report_date - t3.obtain_date).dt.days) <= days_range
     t3['within_range'] = within_days_range
 
     # Aggregate data for table 3
@@ -266,7 +266,7 @@ def get_table_3(df,end_report_date = datetime.now(), days_range = 30):
     # Note: can supply a list of aggregate functions to one columnm i.e. 'col_name': ['min','max']
     cols_for_groupby = ["redcap_data_access_group_display"]
     aggregate_columns_dict={'screening_id':'count',
-                            'date_and_time':'max',
+                            'obtain_date':'max',
                              'eligible':'sum',
                              'ewdateterm':'count',
                            'within_range':'sum'}
@@ -277,7 +277,7 @@ def get_table_3(df,end_report_date = datetime.now(), days_range = 30):
     t3_aggregate = t3_aggregate.reset_index()
 
     # Calculate the number of days since the last consent
-    t3_aggregate['days_since_consent'] = (end_report_date.date() - t3_aggregate['date_and_time'].dt.date).astype(str)
+    t3_aggregate['days_since_consent'] = (end_report_date.date() - t3_aggregate['obtain_date'].dt.date).astype(str)
 
     # Calculate # of ineligible from total - eligible
     t3_aggregate['ineligible'] = t3_aggregate['screening_id'] - t3_aggregate['eligible']
@@ -298,6 +298,11 @@ def get_table_3(df,end_report_date = datetime.now(), days_range = 30):
                           'Total Eligible', 'Total ineligible',  'Total Rescinded'
        ]
     t3_aggregate = t3_aggregate[cols_display_order]
+
+    # Add aggregate sum row
+    t3_aggregate.loc['All']= t3_aggregate.sum(numeric_only=True, axis=0)
+    t3_aggregate.loc['All','Center Name'] = 'All Sites'
+    t3_aggregate.fillna("", inplace=True)
 
     return t3, t3_aggregate
 
@@ -349,6 +354,10 @@ def get_table_4(centers, consented_patients, compare_date = datetime.now()):
                         'ewdateterm':'Resc./Early Term.'}
     table4_agg.rename(columns=rename_cols_dict, inplace = True)
 
+    table4_agg.loc['All']= table4_agg.sum(numeric_only=True, axis=0)
+    table4_agg.loc['All','Center'] = 'All Sites'
+    table4_agg.fillna("", inplace=True)
+
     return table4_agg
 
 def get_tables_5_6(df):
@@ -383,7 +392,7 @@ def get_tables_5_6(df):
 # ----------------------------------------------------------------------------
 # Deviation & Adverse Event Tables
 # ----------------------------------------------------------------------------
-def get_deviation_records(df, multi_data, display_terms_dict):
+def get_deviation_records(df, multi_data, display_terms_mapping):
     # Get Data on Protocol deviations
     deviation_flag_cols = ['erep_prot_dev']
     deviations_cols = ['record_id', 'instance','erep_local_dtime',
@@ -392,73 +401,19 @@ def get_deviation_records(df, multi_data, display_terms_dict):
     deviations = multi_data.dropna(subset=deviation_flag_cols)[deviations_cols ]
 
     # Merge deviations with center info
-    deviations = deviations.merge(df[['redcap_data_access_group','redcap_data_access_group_display','record_id','sp_v1_preop_date']], how='left', on = 'record_id')
+    deviations = deviations.merge(df[['redcap_data_access_group','redcap_data_access_group_display','record_id','start_v1_preop']], how='left', on = 'record_id')
 
     # Convert deviation type to text
-    deviation_terms = display_terms_dict['erep_protdev_type']
+    deviation_terms = display_terms_mapping['erep_protdev_type']
     deviation_terms.columns = ['erep_protdev_type','Deviation']
     deviations = deviations.merge(deviation_terms, how='left', on='erep_protdev_type')
 
     return deviations
 
-# def get_deviations_by_center(df, deviations, display_terms_dict):
-    dev_cols = ['record_id','redcap_data_access_group','screening_id','sp_v1_preop_date']
-    baseline = df.dropna(subset=['sp_v1_preop_date'])[dev_cols]
-    baseline = baseline.reset_index()
-
-    # Flag patients who have an associated deviation
-    records_with_deviation = deviations.record_id.unique()
-    baseline_with_dev = baseline[baseline.record_id.isin(records_with_deviation)]
-
-    # Calculate total baseline participants
-    baseline_total = baseline.groupby(by=['redcap_data_access_group'],as_index=False).size()
-    baseline_total = baseline_total.rename(columns={'size':'Total Subjects'})
-
-    # Calculate total baseline participants with 1+ deviations
-    baseline_dev_total = baseline_with_dev.groupby(by=['redcap_data_access_group'],as_index=False).size()
-    baseline_dev_total = baseline_dev_total.rename(columns={'size':'Total Subjects with Deviation'})
-
-    # Merge dataframes
-    baseline_total = baseline_total.merge(baseline_dev_total, how='outer', on = 'redcap_data_access_group')
-
-    # Calculate Perent Column
-    baseline_total['Percent with 1+ Deviation'] = 100 * (baseline_total['Total Subjects with Deviation'] / baseline_total['Total Subjects'])
-
-    # Add count of all deviations for a given center
-    center_count = pd.DataFrame(deviations.value_counts(subset=['redcap_data_access_group'])).reset_index()
-    center_count.columns =['redcap_data_access_group','Total Deviations']
-    baseline_total = baseline_total.merge(center_count, how='left', on = 'redcap_data_access_group')
-
-    # Merge data with full list of centers
-    centers = display_terms_dict['redcap_data_access_group']
-    baseline_total = centers.merge(baseline_total,how='left', on='redcap_data_access_group')
-
-    # Get list of deviation type by center
-    dev_by_center = deviations[['record_id','Deviation', 'instance','redcap_data_access_group']]
-
-    # Group and count by center
-    dev_by_center = dev_by_center.groupby(by=['redcap_data_access_group','Deviation'],as_index=False).size()
-
-    # Pivot deviation rows into columns
-    dev_by_center_pivot =  pd.pivot_table(dev_by_center, index=["redcap_data_access_group"], columns=["Deviation"], values=["size"])
-
-    # Clean up column levels and naming
-    dev_by_center_pivot.columns = dev_by_center_pivot.columns.droplevel()
-    dev_by_center_pivot.columns.name = ''
-    dev_by_center_pivot = dev_by_center_pivot.reset_index()
-
-    # Merge baseline total and specific deviation information into one table
-    baseline_total = baseline_total.merge(dev_by_center_pivot, how='left', on='redcap_data_access_group')
-
-    # Drop center database name and rename display colum
-    baseline_total = baseline_total.drop(columns=['redcap_data_access_group'])
-    baseline_total = baseline_total.rename(columns={'redcap_data_access_group_display':'Center Name'})
-
-    return baseline_total
 
 def get_deviations_by_center(centers, df, deviations, display_terms_dict):
-    dev_cols = ['record_id','redcap_data_access_group_display','sp_v1_preop_date']
-    baseline = df.dropna(subset=['sp_v1_preop_date'])[dev_cols]
+    dev_cols = ['record_id','redcap_data_access_group_display','start_v1_preop']
+    baseline = df[df['start_v1_preop']==1][dev_cols]
     baseline = baseline.reset_index()
 
     # Count consented patients who have had baseline visits
@@ -505,16 +460,28 @@ def get_deviations_by_center(centers, df, deviations, display_terms_dict):
     centers_all['percent_baseline_with_dev'] = centers_all['percent_baseline_with_dev'].map('{:,.2f}'.format)
     centers_all['percent_baseline_with_dev'] = centers_all['percent_baseline_with_dev'].replace('nan','-')
 
-
-    # Rename and Reorder for display
-    rename_cols = ['Center', 'Patients',
-       '# With Deviation', 'Total Deviations', 'Informed Consent', 'Other',
-       'Protocol Deviation-QST', 'Protocol Deviation-blood drawo',
-       'Protocol Deviation-functional testing', 'Protocol Deviation-imaging',
-       'Visit timeline (outside protocol range)', '% with 1+ Deviation']
-    centers_all.columns = rename_cols
-    col_order = rename_cols[0:4] + rename_cols[-1:] + rename_cols[4:-1]
+    # Reorder for display
+    cols = list(centers_all.columns)
+    col_order = cols[0:3] + cols[-1:] + cols[3:-1]
     centers_all = centers_all[col_order]
+
+    # Rename columns
+    rename_dict = {'redcap_data_access_group_display': ('', 'Center Name'),
+                     'baseline': ('Subjects', 'Baseline'),
+                     'patients_with_deviation': ('Subjects', '# With 1+ Deviations'),
+                     'percent_baseline_with_dev': ('Subjects', '% Baseline with Deviation'),
+                     'total_dev': ('Deviations', 'Total # of Dev.'),
+                     'Blood Draw': ('Deviations', 'Blood Draw'),
+                     'Functional Testing': ('Deviations', 'Functional Testing'),
+                     'Imaging': ('Deviations', 'Imaging  '),
+                     'Informed Consent': ('Deviations', 'Informed Consent'),
+                     'Other': ('Deviations', 'Other'),
+                     'QST': ('Deviations', 'QST'),
+                     'Visit Timeline': ('Deviations', 'Visit Timeline')}
+    centers_all.rename(columns=rename_dict, inplace=True)
+
+    # Convert columns to MultiIndex **FOR NOW DROP LEVEL BECAUSE OF WEIRD DISPLAY
+    centers_all.columns = pd.MultiIndex.from_tuples(centers_all.columns)
 
     return centers_all
 
@@ -555,9 +522,9 @@ def get_adverse_event_records(df, multi_data, display_terms_dict_multi):
     return adverse_events
 
 def get_adverse_events_by_center(centers, df, adverse_events, display_terms_mapping):
-    # Select subset of patients who have had baseline visits (sp_v1_preop_date not null), using record_id as unique identifier
-    baseline_cols = ['record_id','redcap_data_access_group_display','sp_v1_preop_date']
-    baseline = df.dropna(subset=['sp_v1_preop_date'])[baseline_cols]
+    # Select subset of patients who have had baseline visits (start_v1_preop not null), using record_id as unique identifier
+    baseline_cols = ['record_id','redcap_data_access_group_display','start_v1_preop']
+    baseline = df[df['start_v1_preop']==1][baseline_cols]
     baseline = baseline.reset_index()
 
     # Count consented patients who have had baseline visits
@@ -616,7 +583,7 @@ def get_adverse_events_by_center(centers, df, adverse_events, display_terms_mapp
                  ('Relationship', 'Definitely Related'),
                  ('Relationship', 'Possibly/Probably Related'),
                  ('Relationship', 'Not Related'),
-                 ('', 'Total # Events')]
+                 ('', '% Of Subjects with A.E.')]
     centers_ae.columns = rename_cols
     col_order = rename_cols[0:3] + rename_cols[-1:] + rename_cols[4:8] + rename_cols[9:10]  + rename_cols[8:9] + rename_cols[3:4]
     centers_ae = centers_ae[col_order]
@@ -753,8 +720,7 @@ def get_page_data(report_date, ASSETS_PATH, display_terms_file, weekly_csv, mult
     race = rollup_demo_data(demo_active, 'Race', display_terms_dict, 'dem_race')
     ethnicity = rollup_demo_data(demo_active, 'Ethnicity', display_terms_dict, 'ethnic')
     age = pd.DataFrame(demo_active.Age.describe().reset_index())
-    age['Age'] = np.where((age['Age'] % 1 == 0), age['Age'].astype(int), age['Age'].round(2))
-    age['Age'] = age['Age'].astype('str')
-    age['Age'] = age['Age'].replace(".0", "",regex=True)
+    age_round_rows = ['mean', 'std']
+    age['Age'] = np.where((age['index'].isin(age_round_rows)), age['Age'].round(2).astype(str), age['Age'])
 
     return report_date_msg, report_range_msg, table1, table2a, table2b, table3, table4, table5, table6, table7a, table7b, table8a, table8b, sex, race, ethnicity, age
