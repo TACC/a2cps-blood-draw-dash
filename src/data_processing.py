@@ -11,6 +11,7 @@ import pandas as pd # Dataframe manipulations
 import datetime
 from datetime import datetime, timedelta
 
+
 # ----------------------------------------------------------------------------
 # FUNCTIONS
 # ----------------------------------------------------------------------------
@@ -56,94 +57,123 @@ def calc_stacked_bar(df, flag_col):
 # ----------------------------------------------------------------------------
 # LOAD DATA
 # ----------------------------------------------------------------------------
+def load_latest_data(file_url_root, report, mcc_list):
+    data_json = {}
+    latest_suffix = report + '-[mcc]-latest.json'
+    for mcc in mcc_list:
+        json_url = '/'.join([file_url_root, report,latest_suffix.replace('[mcc]',str(mcc))])
+        r = requests.get(json_url)
+        if r.status_code == 200:
+            data_json[mcc] = r.json()
+    return data_json
 
-# Directions for locating file at TACC
-file_url_root ='https://api.a2cps.org/files/v2/download/public/system/a2cps.storage.community/reports'
-report = 'blood'
-report_suffix = report + '-[mcc]-latest.json'
-mcc_list=[1,2]
-index_url = '/'.join([file_url_root, report,'index.json'])
+# ----------------------------------------------------------------------------
+# JSON input into Dataframe
+# ----------------------------------------------------------------------------
 
-def load_data():
-    try:
-        # Read files into json
-        data_json = {}
-        for mcc in mcc_list:
-            json_url = '/'.join([file_url_root, report,report_suffix.replace('[mcc]',str(mcc))])
-            r = requests.get(json_url)
-            if r.status_code == 200:
-                data_json[mcc] = r.json()
+def bloodjson_to_df(json, mcc_list):
+    df = pd.DataFrame()
+    dict_cols = ['Baseline Visit', '6-Wks Post-Op', '3-Mo Post-Op']
+    for mcc in mcc_list:
+        if mcc in json.keys():
+            m = json[mcc]
+            mdf = pd.DataFrame.from_dict(m, orient='index')
+            mdf.dropna(subset=['screening_site'], inplace=True)
+            mdf.reset_index(inplace=True)
+            mdf['MCC'] = mcc
+            for c in dict_cols:
+                if c in mdf.columns:
+                    col_df = dict_to_col(mdf, ['index','MCC','screening_site'], c,'Visit')
+                    df = pd.concat([df, col_df])
+                    df.reset_index(inplace=True, drop=True)
+    return df
 
-        # Convert JSON into dataframe with visit type as category column
-        new_df = pd.DataFrame()
-        dict_cols = ['Baseline Visit', '6-Wks Post-Op', '3-Mo Post-Op']
 
-        for mcc in mcc_list:
-            if mcc in data_json.keys():
-                m = data_json[mcc]
-                mdf = pd.DataFrame.from_dict(m, orient='index')
-                mdf.dropna(subset=['screening_site'], inplace=True)
-                mdf.reset_index(inplace=True)
-                mdf['MCC'] = mcc
-                for c in dict_cols:
-                    if c in mdf.columns:
-                        df = dict_to_col(mdf, ['index','MCC','screening_site'], c,'Visit')
-                        new_df = pd.concat([new_df, df])
-                        new_df.reset_index(inplace=True, drop=True)
+# ----------------------------------------------------------------------------
+# Clean dataframe
+# ----------------------------------------------------------------------------
 
-        # move columns to beginning of DF, so it goes index, mcc, category, baseline dict, 6 week dict, 3 month dict
-        move_column_inplace(new_df, 'Visit', 2)
-        move_column_inplace(new_df, new_df.columns[-1], 4)
-        move_column_inplace(new_df, new_df.columns[-1], 4)
+def clean_blooddata(blood_df):
+    # Drop baseline dict, 6 week dict, 3 month dict
+    blood_df.drop(['Baseline Visit', '6-Wks Post-Op', '3-Mo Post-Op'], axis=1, inplace=True)
 
-        # Convert numeric columns
-        numeric_cols = ['bscp_aliq_cnt','bscp_protocol_dev','bscp_protocol_dev_reason']
-        new_df[numeric_cols] = new_df[numeric_cols].apply(pd.to_numeric,errors='coerce')
+    # move Visit column to beginning of DF
+    move_column_inplace(blood_df, 'Visit', 2)
 
-        # Convert datetime columns
-        datetime_cols = ['bscp_time_blood_draw','bscp_aliquot_freezer_time','bscp_time_centrifuge']
-        new_df[datetime_cols] = new_df[datetime_cols].apply(pd.to_datetime,errors='coerce')
+    # Convert numeric columns
+    numeric_cols = ['bscp_aliq_cnt','bscp_protocol_dev','bscp_protocol_dev_reason']
+    blood_df[numeric_cols] = blood_df[numeric_cols].apply(pd.to_numeric,errors='coerce')
 
-        # Add calculated columns
-        # Calculate time to freezer: freezer time - blood draw time
-        new_df['time_to_freezer'] = new_df['bscp_aliquot_freezer_time'] -new_df['bscp_time_blood_draw']
-        new_df['time_to_freezer_minutes'] = new_df['time_to_freezer'].dt.components['hours']*60 + new_df['time_to_freezer'].dt.components['minutes']
+    # Convert datetime columns
+    datetime_cols = ['bscp_time_blood_draw','bscp_aliquot_freezer_time','bscp_time_centrifuge']
+    blood_df[datetime_cols] = blood_df[datetime_cols].apply(pd.to_datetime,errors='coerce')
 
-        # Calculate time to centrifuge: centrifuge time - blood draw time
-        new_df['time_to_centrifuge'] = new_df['bscp_time_centrifuge'] -new_df['bscp_time_blood_draw']
-        new_df['time_to_centrifuge_minutes'] = new_df['time_to_centrifuge'].dt.components['hours']*60 + new_df['time_to_centrifuge'].dt.components['minutes']
+    # Add calculated columns
+    # Calculate time to freezer: freezer time - blood draw time
+    blood_df['time_to_freezer'] = blood_df['bscp_aliquot_freezer_time'] - blood_df['bscp_time_blood_draw']
+    blood_df['time_to_freezer_minutes'] = blood_df['time_to_freezer'].dt.components['hours']*60 + blood_df['time_to_freezer'].dt.components['minutes']
 
-        # Calculate times exist in correct order
-        # time_order = (new_df['bscp_aliquot_freezer_time'] > new_df['bscp_time_centrifuge']) & (new_df['bscp_time_centrifuge'] > new_df['bscp_time_blood_draw'])
-        # time_limits = (new_df['time_to_centrifuge_minutes'] <= 30) & (new_df['time_to_freezer_minutes'] <= 60)
-        # new_df['time_order'] = time_order
-        # new_df['time_limits'] = time_limits
-        new_df['time_values_check'] = (new_df['time_to_centrifuge_minutes'] < new_df['time_to_freezer_minutes'] ) & (new_df['time_to_centrifuge_minutes'] <= 30) & (new_df['time_to_freezer_minutes'] <= 60)
+    # Calculate time to centrifuge: centrifuge time - blood draw time
+    blood_df['time_to_centrifuge'] = blood_df['bscp_time_centrifuge'] - blood_df['bscp_time_blood_draw']
+    blood_df['time_to_centrifuge_minutes'] = blood_df['time_to_centrifuge'].dt.components['hours']*60 + blood_df['time_to_centrifuge'].dt.components['minutes']
 
-        # Get 'Site' column that combines MCC and screening site
-        new_df['Site'] = 'MCC' + new_df['MCC'].astype(str) + ': ' + new_df['screening_site']
+    # Calculate times exist in correct order
+    blood_df['time_values_check'] = (blood_df['time_to_centrifuge_minutes'] < blood_df['time_to_freezer_minutes'] ) & (blood_df['time_to_centrifuge_minutes'] <= 30) & (blood_df['time_to_freezer_minutes'] <= 60)
 
-        # Convert Deviation Numeric Values to Text
-        deviation_dict = {1:'Unable to obtain blood sample -technical reason',
-                          2: 'Unable to obtain blood sample -patient related',
-                          3: 'Sample handling/processing error'}
-        deviation_df = pd.DataFrame.from_dict(deviation_dict, orient='index')
-        deviation_df.reset_index(inplace=True)
-        deviation_df.columns = ['bscp_protocol_dev_reason','Deviation Reason']
-        new_df = new_df.merge(deviation_df, on='bscp_protocol_dev_reason', how='left')
+    # Get 'Site' column that combines MCC and screening site
+    blood_df['Site'] = 'MCC' + blood_df['MCC'].astype(str) + ': ' + blood_df['screening_site']
 
-        # Rename columns for report DF
+    # Convert Deviation Numeric Values to Text
+    deviation_dict = {1:'Unable to obtain blood sample -technical reason',
+                      2: 'Unable to obtain blood sample -patient related',
+                      3: 'Sample handling/processing error'}
+    deviation_df = pd.DataFrame.from_dict(deviation_dict, orient='index')
+    deviation_df.reset_index(inplace=True)
+    deviation_df.columns = ['bscp_protocol_dev_reason','Deviation Reason']
+    blood_df = blood_df.merge(deviation_df, on='bscp_protocol_dev_reason', how='left')
 
-        drop_cols = ['Baseline Visit', '6-Wks Post-Op', '3-Mo Post-Op']
+    # Clean column names for more human friendly usage
+    rename_dict = {'index':'ID',
+                   'screening_site':'Screening Site',
+                   'bscp_deg_of_hemolysis':'Hemolysis'}
 
-        rename_dict = {'index':'ID',
-                      'screening_site': 'Screening Site',
-                      'bscp_deg_of_hemolysis': 'Degree of Hemolysis'
-                      }
-        report_df = new_df.drop(columns=drop_cols).rename(columns=rename_dict).copy()
+    # rename index col as ID
+    blood_df = blood_df.rename(columns=rename_dict)
 
-        return report_df
-    except:
-        return pd.DataFrame()
+    return blood_df
 
-report_df = load_data()
+# ----------------------------------------------------------------------------
+# MISSING DATA
+# ----------------------------------------------------------------------------
+
+def missing_blood_draws(df):
+    ## MISSING BLOOD DRAWS
+    no_blood_draw = df['bscp_time_blood_draw'].isna()
+    missing_blood = df[no_blood_draw].sort_values(by=['MCC','Screening Site','ID'])
+
+    blood_drawn = df[~no_blood_draw]
+    missing_analysis_logic = (blood_drawn['bscp_lav1_not_obt'] == '1') | (blood_drawn['bscp_sample_obtained'] == '1') | (blood_drawn['bscp_paxg_aliq_na'] == '1')
+    missing_analysis = blood_drawn[missing_analysis_logic]
+    return missing_blood, missing_analysis
+
+# ----------------------------------------------------------------------------
+# Hemolysis
+# ----------------------------------------------------------------------------
+
+def count_hemolysis_records(df):
+    hem_cols = ['ID', 'MCC', 'Screening Site', 'Visit','Hemolysis']
+    hem_df = df[hem_cols].dropna(subset=['Hemolysis'])
+    hem_df['Hemolysis'] = hem_df['Hemolysis'].str.replace('.','0.',regex=True)
+
+    hem_count = hem_df.groupby(by = ['MCC','Screening Site', 'Visit','Hemolysis']).count().reset_index().rename(columns={'ID':'count'})
+
+    # Get complete list of possible sites / Hem Degrees with counts
+    sites_df = hem_df[['MCC','Screening Site']].drop_duplicates().sort_values(by=['MCC','Screening Site']).reset_index(drop=True)
+    hem_degrees = pd.DataFrame({'Hemolysis':hem_df['Hemolysis'].unique()})
+    visits = pd.DataFrame({'Visit':hem_df['Visit'].unique()})
+    hem_degrees = sites_df.merge(hem_degrees, how='cross').merge(visits, how='cross')
+
+    hem_degrees = hem_degrees.merge(hem_count,how='outer', on=['MCC','Screening Site','Hemolysis', 'Visit'])
+    hem_degrees = hem_degrees.fillna(0)
+
+    return hem_degrees

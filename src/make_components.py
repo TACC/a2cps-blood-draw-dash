@@ -5,8 +5,11 @@ import math
 
 # Dash App
 # from jupyter_dash import JupyterDash # for running in a Jupyter Notebook
+import dash
 import dash_core_components as dcc
-import dash_table
+import dash_html_components as html
+import dash_bootstrap_components as dbc
+import dash_table as dt
 
 # Data Visualization
 import plotly.express as px
@@ -18,15 +21,37 @@ from styling import *
 # ----------------------------------------------------------------------------
 
 # ----------------------------------------------------------------------------
+# CUSTOM FUNCTIONS FOR DASH UI COMPONENTS
+# ----------------------------------------------------------------------------
+
+def build_datatable(df,table_id):
+    table = dt.DataTable(
+        id=table_id,
+        columns=[{"name": i, "id": i} for i in df.columns],
+        data=df.to_dict('records'),
+    )
+    return table
+
+# ----------------------------------------------------------------------------
 # Missing Data Section
 # ----------------------------------------------------------------------------
-missing = dcc.Markdown('''
-**Missing values:**
-Flag: Pull complete data for all samples with missing values for any of the variables queried in analyses below including variables relating to whether certain tubes were collected and counts of tubes, timing values, hemolysis levels, and protocol deviations.
+def make_missing(df):
+    missing_blood_df, missing_analysis_df = missing_blood_draws(df)
 
-Purpose: Reach back out to MCC to get missing data filled in if possible.
-    '''
-    ,style={"white-space": "pre"}),
+    missing = html.Div([
+        html.H3('Missing Blood Draws'),
+        build_datatable(missing_blood_df,'table_missing_blood'),
+        html.H3('Missing Analyses'),
+        build_datatable(missing_analysis_df,'table_missing_analysis'),
+        dcc.Markdown('''
+            **Missing values:**
+            Flag: Pull complete data for all samples with missing values for any of the variables queried in analyses below including variables relating to whether certain tubes were collected and counts of tubes, timing values, hemolysis levels, and protocol deviations.
+
+            Purpose: Reach back out to MCC to get missing data filled in if possible.
+                '''
+                ,style={"white-space": "pre"})
+        ])
+    return missing
 
 # ----------------------------------------------------------------------------
 # Sample counts by site
@@ -68,17 +93,25 @@ Purpose: Check that protocols are being followed to ensure high quality blood sa
 # ----------------------------------------------------------------------------
 # Hemolysis
 # ----------------------------------------------------------------------------
-hemolysis = dcc.Markdown('''
-**Hemolysis:**
+def make_hemolysis(df):
+    hem_degrees = count_hemolysis_records(df)
+    hemolysis = html.Div([
+        html.H3('Hemolysis Data'),
+        build_datatable(hem_degrees,'table_hem_degrees'),
 
-* Barplots of counts of samples by hemolysis level, faceted by site
-* Table with percent of samples by site/timepoint with hemolysis < 1
+        dcc.Markdown('''
+        **Hemolysis:**
 
-Flags: Pull complete data for all samples with hemolysis >= 1
+        * Barplots of counts of samples by hemolysis level, faceted by site
+        * Table with percent of samples by site/timepoint with hemolysis < 1
 
-Purpose: Get a feeling for quality of blood samples being collected
-    '''
-    ,style={"white-space": "pre"}),
+        Flags: Pull complete data for all samples with hemolysis >= 1
+
+        Purpose: Get a feeling for quality of blood samples being collected
+            '''
+            ,style={"white-space": "pre"}),
+    ])
+    return hemolysis
 
 # ----------------------------------------------------------------------------
 # Protcol Deviations
