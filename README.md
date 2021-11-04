@@ -1,18 +1,12 @@
-# Weekly Reporting metrics for the A2CPS program
-Docker container of Dash App to display A2CPS trial weekly reporting metrics.
+# Blood Draw Reporting for the A2CPS program
+Docker container of Dash App to display A2CPS trial blood draw reporting metrics.
 
-This dashboard is intended for use by study personnel and others interested in the reasons why patients either complete or leave the trial.
 
 ## Version History
 | Version   | Date | Description |
 | ------ | ------ | ------ |
-| 0.0.1 | 05/18/2021 | Initial dashboard with portions of the data loaded into tables. |
+| 0.0.1 | date | Status |
 
-## Dashboard Description
-
-Data from the A2CPS program is loaded via apis that provide information on both all screened patients and those who continue into the program.
-
-This data is cleaned and transformed to create the tables as outlined in the Weekly Report document on Confluence.
 
 # Development Previews
 
