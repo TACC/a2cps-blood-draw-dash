@@ -23,11 +23,19 @@ from styling import *
 file_url_root ='https://api.a2cps.org/files/v2/download/public/system/a2cps.storage.community/reports'
 report = 'blood'
 mcc_list=[1,2]
+local_datafile = 'blood_dict.json'
 
-blood_dict = load_latest_data(file_url_root, report, mcc_list)
+# data_load = load_latest_data(file_url_root, report, mcc_list)
+# if data_load:
+#     blood_dict = data_load
+# else:
+blood_dict = load_data_file(ASSETS_PATH, local_datafile)
 blood_df = bloodjson_to_df(blood_dict, mcc_list)
+
 report_df = clean_blooddata(blood_df)
 report_dict = report_df.to_dict('records')
+
+source = 'Data Source: local data file'
 
 # ----------------------------------------------------------------------------
 # APP Settings
@@ -51,7 +59,8 @@ header = html.Div([
         data = report_dict
     ),
     dbc.Row([
-        dbc.Col([html.H1('A2CPS Blood Draw Report')],width=8),
+        dbc.Col([html.H1('A2CPS Blood Draw Report')],width=4),
+        dbc.Col([html.H5(source)],width=4),
         dbc.Col([html.Div([
             dcc.Dropdown(
                 id='dropdown-date',
@@ -74,16 +83,16 @@ def make_content_tabs(report_df):
                 html.Div(make_missing(report_df), id='tab_missing'),
             ]),
             dcc.Tab(label='Site Info', children=[
-                html.Div(site, id='tab_site'),
+                html.Div(make_site(report_df), id='tab_site'),
             ]),
             dcc.Tab(label='Timing', children=[
-                html.Div(timing, id='tab_timing'),
+                html.Div(make_timing(report_df), id='tab_timing'),
             ]),
             dcc.Tab(label='Hemolysis', children=[
                 html.Div(make_hemolysis(report_df), id='tab_hemolysis'),
             ]),
             dcc.Tab(label='Deviations', children=[
-                html.Div(deviations, id='tab_deviations'),
+                html.Div(make_deviations(report_df), id='tab_deviations'),
             ]),
         ]),
         ])

@@ -57,6 +57,12 @@ def calc_stacked_bar(df, flag_col):
 # ----------------------------------------------------------------------------
 # LOAD DATA
 # ----------------------------------------------------------------------------
+
+def load_data_file(ASSETS_PATH, filename):
+    with open(os.path.join(ASSETS_PATH, filename )) as json_file:
+        data_json = json.load(json_file)
+    return data_json
+
 def load_latest_data(file_url_root, report, mcc_list):
     data_json = {}
     latest_suffix = report + '-[mcc]-latest.json'
@@ -65,6 +71,9 @@ def load_latest_data(file_url_root, report, mcc_list):
         r = requests.get(json_url)
         if r.status_code == 200:
             data_json[mcc] = r.json()
+        else:
+            print(json_url)
+            print(r.status_code)
     return data_json
 
 # ----------------------------------------------------------------------------
@@ -77,6 +86,10 @@ def bloodjson_to_df(json, mcc_list):
     for mcc in mcc_list:
         if mcc in json.keys():
             m = json[mcc]
+        if str(mcc) in json.keys():
+            mcc=str(mcc)
+            m = json[mcc]
+        if m:
             mdf = pd.DataFrame.from_dict(m, orient='index')
             mdf.dropna(subset=['screening_site'], inplace=True)
             mdf.reset_index(inplace=True)
@@ -177,3 +190,12 @@ def count_hemolysis_records(df):
     hem_degrees = hem_degrees.fillna(0)
 
     return hem_degrees
+
+
+# ----------------------------------------------------------------------------
+# Deviations
+# ----------------------------------------------------------------------------
+def get_deviations(df):
+    dev_cols = ['Site','ID','Visit','bscp_protocol_dev','bscp_protocol_dev_reason','Deviation Reason']
+    dev = df[dev_cols][df.bscp_protocol_dev !=0]
+    return dev
