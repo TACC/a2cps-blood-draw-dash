@@ -145,20 +145,28 @@ def make_site(df):
 # Timing
 # ----------------------------------------------------------------------------
 def make_timing(df):
+    blood_drawn, missing_blood_df, missing_analysis_df = missing_blood_draws(df)
+
     timing = html.Div([
+        dbc.Row([]),
+        dbc.Row([]),
+        dbc.Row([
+            html.H4('Records that fail time checks'),
+            build_datatable(blood_drawn[~blood_drawn['time_values_check']],'table_time_check_fail'),
+        ]),
         dcc.Markdown('''
-    **Timing Data**
-    * Barplots of counts of samples by time to centrifuge, faceted by site (I think it is a little too hard to see easily with all sites on the same plot)
-    * Barplots of counts of samples by time to freezer, faceted by site
+            **Timing Data**
+            * Barplots of counts of samples by time to centrifuge, faceted by site (I think it is a little too hard to see easily with all sites on the same plot)
+            * Barplots of counts of samples by time to freezer, faceted by site
 
-    * Table with percent of samples by site/timepoint where time to centrifuge <= 30mins
-    * Table with percent of samples by site/timepoint where time to freezer <= 60mins
+            * Table with percent of samples by site/timepoint where time to centrifuge <= 30mins
+            * Table with percent of samples by site/timepoint where time to freezer <= 60mins
 
-    Flags: Pull complete data for all samples with time to centrifuge > 30mins OR time to freezer > 60 mins OR time to freezer < time to centrifuge
+            Flags: Pull complete data for all samples with time to centrifuge > 30mins OR time to freezer > 60 mins OR time to freezer < time to centrifuge
 
-    Purpose: Check that protocols are being followed to ensure high quality blood samples
-        '''
-        ,style={"white-space": "pre"}),
+            Purpose: Check that protocols are being followed to ensure high quality blood samples
+                '''
+                ,style={"white-space": "pre"}),
         ])
     return timing
 # ----------------------------------------------------------------------------
