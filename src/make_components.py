@@ -31,6 +31,8 @@ def build_datatable(df,table_id):
             columns=[{"name": i, "id": i} for i in df.columns],
             data=df.to_dict('records'),
             style_table={'overflowX': 'auto'},
+            sort_action="native",
+            sort_mode="multi",
             page_size=10
         )
         ],style={'margin-bottom':'50px'})
@@ -137,9 +139,12 @@ def make_hemolysis(df):
 
 def make_deviations(df):
     deviations_df = get_deviations(df)
+    dev_count = deviations_df.groupby(['Site','Visit','Deviation Reason'])['ID'].count().rename('count').reset_index()
     deviations = html.Div([
         html.H3('Protocol Deviations'),
         build_datatable(deviations_df,'table_deviations'),
+        html.H3('Protocol Deviations: Count'),
+        build_datatable(dev_count,'table_deviations_count'),
         dcc.Markdown('''
         **Protocol Deviations**
         Table of counts of protocol deviations by type, by site/timepoint
