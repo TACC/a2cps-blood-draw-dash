@@ -38,11 +38,17 @@ def build_datatable(df,table_id):
         ],style={'margin-bottom':'50px'})
     return table
 
+def bar_percent_figure(fig_df):
+    fig = px.bar(fig_df, x='Visit', y='Percent', color='Site', barmode='group')
+    fig.update_xaxes(categoryorder='category descending')
+    return fig
+
 # ----------------------------------------------------------------------------
 # Missing Data Section
 # ----------------------------------------------------------------------------
+
 def make_missing(df):
-    missing_blood_df, missing_analysis_df = missing_blood_draws(df)
+    blood_drawn, missing_blood_df, missing_analysis_df = missing_blood_draws(df)
 
     missing = html.Div([
         html.H3('Missing Blood Draws'),
@@ -63,22 +69,77 @@ def make_missing(df):
 # Sample counts by site
 # ----------------------------------------------------------------------------
 def make_site(df):
+    blood_drawn, missing_blood_df, missing_analysis_df = missing_blood_draws(df)
+
+    # Count by site
+    blood_site_count = blood_drawn.groupby(['Site','Visit'])['ID'].count().rename('Count').reset_index()
+    blood_site_count_fig = px.bar(blood_site_count, x='Visit', y='Count', color='Site',barmode='group')
+    blood_site_count_fig.update_xaxes(categoryorder='category descending')
+
+    # Count by percent
+    fig_no_pax_df = bar_percent_figure(metric_obtained(blood_drawn, 'bscp_paxg_aliq_na'))
+    fig_no_buffy_df = bar_percent_figure(metric_obtained(blood_drawn, 'bscp_buffycoat_na'))
+    fig_aliquot_5_df = bar_percent_figure(aliquot_obtained(blood_drawn, 5))
+    fig_aliquot_1_df = bar_percent_figure(aliquot_obtained(blood_drawn, 1))
+
+    # Missing elements
+    pax_missing = ~blood_drawn['bscp_paxg_aliq_na'].isna()
+    buffy_missing = ~blood_drawn['bscp_buffycoat_na'].isna()
+    aliquots_missing = blood_drawn['bscp_aliq_cnt'].isna()
+    metrics_missing = blood_drawn[pax_missing | buffy_missing | aliquots_missing]
+    move_column_inplace(metrics_missing, 'bscp_buffycoat_na', 4)
+    move_column_inplace(metrics_missing, 'bscp_paxg_aliq_na', 4)
+    move_column_inplace(metrics_missing, 'bscp_aliq_cnt', 4)
+
     site = html.Div([
-    dcc.Markdown('''
-    **Sample Counts by Site**
-    * Barplot showing counts by site (parallel bars) and by timepoint (groups of bars) – DONE
-    * Barplot showing percent of samples by site/timepoint with PaxGene obtained
-    * Barplot showing percent of samples by site/timepoint with BuffyCoat obtained
-    * Barplot showing percent of samples by site/timepoint with at least one aliquot tube obtained
-    * Barplot showing percent of samples by site/timepoint with at least five aliquot tubes obtained
-    * Barplot showing distribution of counts of aliquot tubes, faceted by site/timepoint (e.g., num sites rows by num timepoints columns, similar to Aliquots Collected plot from current version, but I think I'd prefer sites on separate panels)
+        dbc.Row([
+            dbc.Col([
+                html.H4('Count by Site'),
+                dcc.Graph(figure=blood_site_count_fig,id = 'fig_blood_site_count'),
+            ],width=6),
+            dbc.Col([
 
-    Flags: Pull complete data for all samples with no PaxGene OR no BuffyCoat OR no aliquot tubes
+            ],width=6),
+        ]),
+        dbc.Row([
+            dbc.Col([
+                html.H4('No Pax'),
+                dcc.Graph(figure=fig_no_pax_df, id = 'fig_no_pax'),
+            ],width=6),
+            dbc.Col([
+                html.H4('No Buffy'),
+                dcc.Graph(figure=fig_no_buffy_df, id = 'fig_no_buffy'),
+            ],width=6),
+        ]),
+        dbc.Row([
+            dbc.Col([
+                html.H4('Aliquots: >= 5'),
+                dcc.Graph(figure=fig_aliquot_5_df,id = 'fig_aliquot_5'),
+            ],width=6),
+            dbc.Col([
+                html.H4('Aliquots: at least one'),
+                dcc.Graph(figure=fig_aliquot_1_df, id = 'fig_aliquot_1'),
+            ],width=6),
+        ]),
+        html.H4('Blood Draws with missing components'),
+        build_datatable(metrics_missing,'table_metrics_missing'),
+        html.H4('All Blood Draws'),
+        build_datatable(blood_drawn,'table_blood'),
+        dcc.Markdown('''
+        **Sample Counts by Site**
+        * Barplot showing counts by site (parallel bars) and by timepoint (groups of bars) – DONE
+        * Barplot showing percent of samples by site/timepoint with PaxGene obtained
+        * Barplot showing percent of samples by site/timepoint with BuffyCoat obtained
+        * Barplot showing percent of samples by site/timepoint with at least one aliquot tube obtained
+        * Barplot showing percent of samples by site/timepoint with at least five aliquot tubes obtained
+        * Barplot showing distribution of counts of aliquot tubes, faceted by site/timepoint (e.g., num sites rows by num timepoints columns, similar to Aliquots Collected plot from current version, but I think I'd prefer sites on separate panels)
 
-    Purpose: Track number of samples by site, getting a full picture of the types of tubes collected, percent of samples with adequate data collected for analysis
-        '''
-        ,style={"white-space": "pre"}),
-        ])
+        Flags: Pull complete data for all samples with no PaxGene OR no BuffyCoat OR no aliquot tubes
+
+        Purpose: Track number of samples by site, getting a full picture of the types of tubes collected, percent of samples with adequate data collected for analysis
+            '''
+            ,style={"white-space": "pre"}),
+            ])
     return site
 # ----------------------------------------------------------------------------
 # Timing

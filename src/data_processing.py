@@ -167,7 +167,39 @@ def missing_blood_draws(df):
     blood_drawn = df[~no_blood_draw]
     missing_analysis_logic = (blood_drawn['bscp_lav1_not_obt'] == '1') | (blood_drawn['bscp_sample_obtained'] == '1') | (blood_drawn['bscp_paxg_aliq_na'] == '1')
     missing_analysis = blood_drawn[missing_analysis_logic]
-    return missing_blood, missing_analysis
+    return blood_drawn, missing_blood, missing_analysis
+
+# ----------------------------------------------------------------------------
+# SITE INFO
+# ----------------------------------------------------------------------------
+
+def metric_obtained(blood_drawn_df, metric_col):
+    blood_site_count = blood_drawn_df.groupby(['Site','Visit'])['ID'].count().rename('Count').reset_index()
+
+    cols = ['ID', 'Site', 'Visit'] + [metric_col]
+    df = blood_drawn_df[cols]
+    df = df[~df[metric_col].isna()]
+    df_count = df.groupby(['Site','Visit'])['ID'].count().rename('Metric Count').reset_index()
+
+    df_total = blood_site_count.merge(df_count, how='left', on=['Site','Visit']).fillna(0)
+    df_total['Percent'] = 100 * (df_total['Count'] - df_total['Metric Count']) / df_total['Count']
+
+    return df_total
+
+def aliquot_obtained(blood_drawn_df, threshold):
+    blood_site_count = blood_drawn_df.groupby(['Site','Visit'])['ID'].count().rename('Count').reset_index()
+
+    cols = ['ID', 'Site', 'Visit','bscp_aliq_cnt']
+    df = blood_drawn_df[cols].copy()
+    df = df.fillna(0)
+    df['Threshold'] = df['bscp_aliq_cnt'] >= threshold
+
+    df_count = df[~df['Threshold']].groupby(['Site','Visit'])['ID'].count().rename('Below Threshold').reset_index()
+
+    df_total = blood_site_count.merge(df_count, how='left', on=['Site','Visit']).fillna(0)
+    df_total['Percent'] = 100 * (df_total['Count'] - df_total['Below Threshold']) / df_total['Count']
+
+    return df_total
 
 # ----------------------------------------------------------------------------
 # Hemolysis
