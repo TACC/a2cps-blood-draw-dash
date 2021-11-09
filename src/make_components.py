@@ -33,7 +33,11 @@ def build_datatable(df,table_id):
             style_table={'overflowX': 'auto'},
             sort_action="native",
             sort_mode="multi",
-            page_size=10
+            page_size=10,
+            style_cell={
+                'whitespace':'normal',
+                'height':'auto',
+            },
         )
         ],style={'margin-bottom':'50px'})
     return table
@@ -51,17 +55,29 @@ def make_missing(df):
     blood_drawn, missing_blood_df, missing_analysis_df = missing_blood_draws(df)
 
     missing = html.Div([
-        html.H3('Missing Blood Draws'),
-        build_datatable(missing_blood_df,'table_missing_blood'),
-        html.H3('Missing Analyses'),
-        build_datatable(missing_analysis_df,'table_missing_analysis'),
-        dcc.Markdown('''
-            **Missing values:**
-            Flag: Pull complete data for all samples with missing values for any of the variables queried in analyses below including variables relating to whether certain tubes were collected and counts of tubes, timing values, hemolysis levels, and protocol deviations.
+        dbc.Row([
+            dbc.Col([
+                html.H3('Missing Blood Draws'),
+                build_datatable(missing_blood_df,'table_missing_blood'),
+            ],width=12),
+        ]),
+        dbc.Row([
+            dbc.Col([
+                html.H3('Missing Analyses'),
+                build_datatable(missing_analysis_df,'table_missing_analysis'),
+            ],width=12),
+        ]),
+        dbc.Row([
+            dbc.Col([
+                dcc.Markdown('''
+                    **Missing values:**
+                    Flag: Pull complete data for all samples with missing values for any of the variables queried in analyses below including variables relating to whether certain tubes were collected and counts of tubes, timing values, hemolysis levels, and protocol deviations.
 
-            Purpose: Reach back out to MCC to get missing data filled in if possible.
-                '''
-                ,style={"white-space": "pre"})
+                    Purpose: Reach back out to MCC to get missing data filled in if possible.
+                        '''
+                        ,style={"white-space": "pre"})
+            ],width=12),
+        ]),
         ])
     return missing
 
@@ -103,11 +119,11 @@ def make_site(df):
         ]),
         dbc.Row([
             dbc.Col([
-                html.H4('No Pax'),
+                html.H4('Pax Obtained'),
                 dcc.Graph(figure=fig_no_pax_df, id = 'fig_no_pax'),
             ],width=6),
             dbc.Col([
-                html.H4('No Buffy'),
+                html.H4('Buffy Obtained'),
                 dcc.Graph(figure=fig_no_buffy_df, id = 'fig_no_buffy'),
             ],width=6),
         ]),
@@ -144,29 +160,73 @@ def make_site(df):
 # ----------------------------------------------------------------------------
 # Timing
 # ----------------------------------------------------------------------------
+def time_bar(df):
+    df = df.sort_values(by=['Site'])
+    fig = px.bar(df, x='Visit', y='Percent', facet_col='Site', barmode='group', color='Site')
+    fig.update_xaxes(categoryorder='category descending', title='')
+    return fig
+
+def time_hist(df, time_col, range_top):
+    hist_df = df[df[time_col] < range_top].sort_values(by=['Site'])
+    fig = px.histogram(hist_df, x=time_col, facet_col='Site', color='Site')
+    return fig
+
 def make_timing(df):
     blood_drawn, missing_blood_df, missing_analysis_df = missing_blood_draws(df)
 
+    centrifuge_df = pass_threshold(blood_drawn,'time_to_centrifuge_minutes', 30)
+    # fig_centrifuge_df = bar_percent_figure(centrifuge_df)
+    fig_centrifuge_df = time_bar(centrifuge_df)
+    hist_centrifuge = time_hist(blood_drawn, "time_to_centrifuge_minutes", 200)
+
+
+
+    freezer_df = pass_threshold(blood_drawn,'time_to_freezer_minutes', 60)
+    # fig_freezer_df = bar_percent_figure(freezer_df)
+    fig_freezer_df = time_bar(freezer_df)
+    hist_freezer = time_hist(blood_drawn, "time_to_freezer_minutes", 200)
+
     timing = html.Div([
-        dbc.Row([]),
-        dbc.Row([]),
         dbc.Row([
-            html.H4('Records that fail time checks'),
-            build_datatable(blood_drawn[~blood_drawn['time_values_check']],'table_time_check_fail'),
+            dbc.Col([
+                html.H4('Distribution of centrifuge time'),
+                dcc.Graph(figure=hist_centrifuge, id = 'fig_hist_centrifuge'),
+                html.H4('Percent of samples to Centrifuge in less than 30 min'),
+                dcc.Graph(figure=fig_centrifuge_df, id = 'fig_centrifuge'),
+            ],width=6),
+            dbc.Col([
+                html.H4('Distribution of freezer time'),
+                dcc.Graph(figure=hist_freezer, id = 'fig_hist_freezer'),
+                html.H4('Percent of samples to Freezer in less than 30 min'),
+                dcc.Graph(figure=fig_freezer_df, id = 'fig_freezer'),
+            ],width=6)
         ]),
-        dcc.Markdown('''
-            **Timing Data**
-            * Barplots of counts of samples by time to centrifuge, faceted by site (I think it is a little too hard to see easily with all sites on the same plot)
-            * Barplots of counts of samples by time to freezer, faceted by site
+        dbc.Row([
+        ]),
+        dbc.Row([
+            dbc.Col([
+                html.H4('Records that fail time checks'),
+                build_datatable(blood_drawn[~blood_drawn['time_values_check']],'table_time_check_fail'),
+                ],width = 12)
+        ]),
+        dbc.Row([
+            dbc.Col([
+                dcc.Markdown('''
+                    **Timing Data**
+                    * Barplots of counts of samples by time to centrifuge, faceted by site (I think it is a little too hard to see easily with all sites on the same plot)
+                    * Barplots of counts of samples by time to freezer, faceted by site
 
-            * Table with percent of samples by site/timepoint where time to centrifuge <= 30mins
-            * Table with percent of samples by site/timepoint where time to freezer <= 60mins
+                    * Table with percent of samples by site/timepoint where time to centrifuge <= 30mins
+                    * Table with percent of samples by site/timepoint where time to freezer <= 60mins
 
-            Flags: Pull complete data for all samples with time to centrifuge > 30mins OR time to freezer > 60 mins OR time to freezer < time to centrifuge
+                    Flags: Pull complete data for all samples with time to centrifuge > 30mins OR time to freezer > 60 mins OR time to freezer < time to centrifuge
 
-            Purpose: Check that protocols are being followed to ensure high quality blood samples
-                '''
-                ,style={"white-space": "pre"}),
+                    Purpose: Check that protocols are being followed to ensure high quality blood samples
+                        '''
+                        ,style={"white-space": "pre"}),
+            ],width=12)
+        ]),
+
         ])
     return timing
 # ----------------------------------------------------------------------------
