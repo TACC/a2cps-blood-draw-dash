@@ -53,6 +53,29 @@ def calc_stacked_bar(df, flag_col):
 
     return flag_df_all
 
+def pass_threshold(blood_drawn_df, metric_col, metric_threshold, fail_over = True):
+    # Drop missing rows where metric wasn't collected
+    df = blood_drawn_df[~blood_drawn_df[metric_col].isna()]
+
+    # Count metric entries by site
+    df_count = df.groupby(['Site','Visit'])['ID'].count().rename('Count').reset_index()
+
+    # Subset records that fail threshold (default is over = fail)
+    if fail_over:
+        fail_df = df[df[metric_col] >= metric_threshold]
+    else:
+        fail_df = df[df[metric_col] <= metric_threshold]
+
+    # Count failures by site
+    fail_df_count = fail_df.groupby(['Site','Visit'])['ID'].count().rename('Fail').reset_index()
+
+    # Merge counts itnto single data frame
+    count_total = df_count.merge(fail_df_count, how='left', on=['Site','Visit']).fillna(0)
+
+    # Calculate Pass percentage
+    count_total['Percent'] = 100 * (count_total['Count'] - count_total['Fail']) / count_total['Count']
+
+    return count_total
 
 # ----------------------------------------------------------------------------
 # LOAD DATA
