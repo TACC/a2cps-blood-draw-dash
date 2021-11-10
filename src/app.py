@@ -37,6 +37,8 @@ blood_df = bloodjson_to_df(blood_dict, mcc_list)
 report_df = clean_blooddata(blood_df)
 report_dict = report_df.to_dict('records')
 
+sites = list(report_df.sort_values(by=['Site'])['Site'].unique())
+
 source = 'Data Source: ' + file_source
 
 # ----------------------------------------------------------------------------
@@ -61,22 +63,27 @@ header = html.Div([
         data = report_dict
     ),
     dbc.Row([
-        dbc.Col([html.H1('A2CPS Blood Draw Report')],width=4),
-        dbc.Col([html.H5(source)],width=4),
+        dbc.Col([html.H1('A2CPS Blood Draw Report'), html.H5(source)],width=8),
         dbc.Col([html.Div([
+            html.H5('Report Date:'),
             dcc.Dropdown(
                 id='dropdown-date',
                 options=[
                     {'label': 'latest', 'value': 'latest'}
                 ],
-                value='latest'
+                value='latest',
             ),
-        ],style={"float":"right"})],width=3),
+        ])],width=2),
+        dbc.Col([html.Div([
+            html.H5('Site:'),
+            dcc.Dropdown(
+                id='dropdown-site',
+                options=[{'label': 'All Sites', 'value': 'all'}] + [{'label': k, 'value': k} for k in sites],
+                value='all',
+            ),
+        ])],width=2),
     ]),
 ])
-
-# if report_df.empty:
-data_check = ''
 
 def make_content_tabs(report_df):
     content_tabs = html.Div([
@@ -106,15 +113,16 @@ def make_content_tabs(report_df):
 
 def serve_layout():
     # try:
+    dcc.Store(id='report_data'),
     page_layout = html.Div([
         dbc.Row([
-            dbc.Col(data_check),
+            dbc.Col(id='testdiv'),
         ],style={"margin":"10px"}),
         dbc.Row([
             dbc.Col(header),
         ],style={"margin":"10px"}),
         dbc.Row([
-            dbc.Col(make_content_tabs(report_df)),
+            dbc.Col(id='contents_div'),
         ],style={"margin":"10px"}),
     ])
     # except:
@@ -128,7 +136,14 @@ app.layout = serve_layout
 # DATA CALLBACKS
 # ----------------------------------------------------------------------------
 
-# Add callbacks to respond to user input here
+# Allow User to run report for all Sites, or just for one.
+@app.callback(Output("contents_div","children"), Input('dropdown-site',"value"))
+def set_report_data(site):
+    if site == 'all':
+        site_df = report_df
+    else:
+        site_df = report_df[report_df['Site'] == site]
+    return make_content_tabs(site_df)
 
 # ----------------------------------------------------------------------------
 # RUN APPLICATION
