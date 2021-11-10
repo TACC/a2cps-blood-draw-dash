@@ -58,12 +58,14 @@ def make_missing(df):
         dbc.Row([
             dbc.Col([
                 html.H3('Missing Blood Draws'),
+                dcc.Markdown('''Records without a value in the 'bscp_time_blood_draw' column.'''),
                 build_datatable(missing_blood_df,'table_missing_blood'),
             ],width=12),
         ]),
         dbc.Row([
             dbc.Col([
                 html.H3('Missing Analyses'),
+                dcc.Markdown(''' Records with a value of 1 in any of ['bscp_lav1_not_obt', 'bscp_sample_obtained', 'bscp_paxg_aliq_na'] '''),
                 build_datatable(missing_analysis_df,'table_missing_analysis'),
             ],width=12),
         ]),
@@ -111,6 +113,7 @@ def make_site(df):
         dbc.Row([
             dbc.Col([
                 html.H4('Count by Site'),
+                dcc.Markdown(''' Count of records with blood draw data grouped by Site and visit type'''),
                 dcc.Graph(figure=blood_site_count_fig,id = 'fig_blood_site_count'),
             ],width=6),
             dbc.Col([
@@ -119,27 +122,33 @@ def make_site(df):
         ]),
         dbc.Row([
             dbc.Col([
-                html.H4('Pax Obtained'),
+                html.H4('Percent of samples with Pax Obtained'),
+                dcc.Markdown(''' '''),
                 dcc.Graph(figure=fig_no_pax_df, id = 'fig_no_pax'),
             ],width=6),
             dbc.Col([
-                html.H4('Buffy Obtained'),
+                html.H4('Percent of samples with Buffy Obtained'),
+                dcc.Markdown(''' '''),
                 dcc.Graph(figure=fig_no_buffy_df, id = 'fig_no_buffy'),
             ],width=6),
         ]),
         dbc.Row([
             dbc.Col([
-                html.H4('Aliquots: >= 5'),
+                html.H4('Percent of samples with Aliquot count >= 5'),
+                dcc.Markdown(''' '''),
                 dcc.Graph(figure=fig_aliquot_5_df,id = 'fig_aliquot_5'),
             ],width=6),
             dbc.Col([
-                html.H4('Aliquots: at least one'),
+                html.H4('Percent of samples with at least one Aliquot'),
+                dcc.Markdown(''' '''),
                 dcc.Graph(figure=fig_aliquot_1_df, id = 'fig_aliquot_1'),
             ],width=6),
         ]),
         html.H4('Blood Draws with missing components'),
+        dcc.Markdown(''' Samples with a value in one of ['bscp_paxg_aliq_na', 'bscp_buffycoat_na', 'bscp_aliq_cnt']'''),
         build_datatable(metrics_missing,'table_metrics_missing'),
         html.H4('All Blood Draws'),
+        dcc.Markdown(''' Full cleaned data set for all samples with a blood draw (here at this point just for reference. Will likely be removed later.) '''),
         build_datatable(blood_drawn,'table_blood'),
         dcc.Markdown('''
         **Sample Counts by Site**
@@ -190,22 +199,29 @@ def make_timing(df):
         dbc.Row([
             dbc.Col([
                 html.H4('Distribution of centrifuge time'),
+                    dcc.Markdown('''Histograms of times below 200.  There are only a few records >200, but they are removed for better display of the more normal values.'''),
                 dcc.Graph(figure=hist_centrifuge, id = 'fig_hist_centrifuge'),
                 html.H4('Percent of samples to Centrifuge in less than 30 min'),
+                dcc.Markdown(''' '''),
                 dcc.Graph(figure=fig_centrifuge_df, id = 'fig_centrifuge'),
             ],width=6),
             dbc.Col([
                 html.H4('Distribution of freezer time'),
+                    dcc.Markdown('''Histograms of times below 200.  There are only a few records >200, but they are removed for better display of the more normal values.'''),
                 dcc.Graph(figure=hist_freezer, id = 'fig_hist_freezer'),
                 html.H4('Percent of samples to Freezer in less than 30 min'),
+                dcc.Markdown(''' '''),
                 dcc.Graph(figure=fig_freezer_df, id = 'fig_freezer'),
             ],width=6)
         ]),
         dbc.Row([
+
         ]),
         dbc.Row([
             dbc.Col([
                 html.H4('Records that fail time checks'),
+                dcc.Markdown(''' Records flagged as failing the time check criteria.
+                 blood_df['time_values_check'] = (blood_df['time_to_centrifuge_minutes'] < blood_df['time_to_freezer_minutes'] ) & (blood_df['time_to_centrifuge_minutes'] <= 30) & (blood_df['time_to_freezer_minutes'] <= 60) '''),
                 build_datatable(blood_drawn[~blood_drawn['time_values_check']],'table_time_check_fail'),
                 ],width = 12)
         ]),
@@ -243,6 +259,10 @@ def make_hemolysis(df):
 
     hemolysis = html.Div([
         html.H3('Hemolysis Data'),
+        dcc.Markdown('''Roll up data to count number of records by Site, Visit type and degree of hemolysis (table at end)
+        Plot barplots of hemolysis degree data colored by visit and split by site
+        '''),
+
         html.Div([
             dcc.Graph(id='graph'+site, figure = make_hemolysis_fig(hem_degrees, site)) for site in hem_degrees['Screening Site'].unique()
         ]),
@@ -271,8 +291,10 @@ def make_deviations(df):
     dev_count = deviations_df.groupby(['Site','Visit','Deviation Reason'])['ID'].count().rename('count').reset_index()
     deviations = html.Div([
         html.H3('Protocol Deviations'),
+        dcc.Markdown(''' Deviation columns for records where bscp_protocol_dev !=0 '''),
         build_datatable(deviations_df,'table_deviations'),
         html.H3('Protocol Deviations: Count'),
+        dcc.Markdown('''Count of deviation records rolled up by site, visit type and deviation reason '''),
         build_datatable(dev_count,'table_deviations_count'),
         dcc.Markdown('''
         **Protocol Deviations**

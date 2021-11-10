@@ -25,17 +25,19 @@ report = 'blood'
 mcc_list=[1,2]
 local_datafile = 'blood_dict.json'
 
-# data_load = load_latest_data(file_url_root, report, mcc_list)
-# if data_load:
-#     blood_dict = data_load
-# else:
-blood_dict = load_data_file(ASSETS_PATH, local_datafile)
+data_load = load_latest_data(file_url_root, report, mcc_list)
+if data_load:
+    blood_dict = data_load
+    file_source = 'TACC files'
+else:
+    blood_dict = load_data_file(ASSETS_PATH, local_datafile)
+    file_source = 'local files'
 blood_df = bloodjson_to_df(blood_dict, mcc_list)
 
 report_df = clean_blooddata(blood_df)
 report_dict = report_df.to_dict('records')
 
-source = 'Data Source: local data file'
+source = 'Data Source: ' + file_source
 
 # ----------------------------------------------------------------------------
 # APP Settings
